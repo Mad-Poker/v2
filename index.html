@@ -317,6 +317,19 @@ function newGame(keepStats){
 function startRound(){
   G.round++;
   if(G.round>G.maxRounds){startShowdown();return;}
+  
+  // ВАЖНО: Сброс состояния игроков для нового раунда
+  players.forEach(p => {
+    p.active = true;
+    p.cards = [];
+    p.bet = 0;
+    p.allin = false;
+    p.acted = false;
+    p.bubble = null;
+  });
+  G.deck = shuffle(mkDeck()); // Перетасовка колоды
+  G.flying = []; // Очистка летящих карт
+
   G.flags={x2:false,lowball:false,whisper:false,drunk:false,tax:false,big:false,invert:false,extraRooster:false,crazySuits:false};
   G.timerMax=60;G.turtleUsed=false;G.chaosUsed=false;
   if(G.round===5&&G.stolenPot>0){
@@ -573,7 +586,7 @@ const CHEATS=[
   {name:'🧲 ФОРС-СКИД',cost:2,desc:'Случайный бот скидывает',fn(){
     const bots=players.filter(p=>!p.isHuman&&p.active&&!p.allin);if(!bots.length)return false;
     const b=pick(bots);b.active=false;b.acted=true;say(b.seat,'...ладно, скинул. голоса так сказали.');
-    banner('🧲 '+b.name+' УГОВОРЕН СКИНУТЬ. Силой пиццы и харизмы.');
+    banner('🧲 '+b.name+' УГОВОРЁН СКИНУТЬ. Силой пиццы и харизмы.');
     if(G.phase==='bet'){if(players.filter(p=>p.active).length<=1){advance();return true;}if(G.actor===b.seat)advance();}
     return true;}},
   {name:'🖨 ПЕЧАТНЫЙ СТАНОК',cost:3,desc:'+150 🪙 из воздуха',fn(){players[0].chips+=150;snd.coin();spawn(SEATS[0].x,SEATS[0].y,['🪙'],20,240);banner('🖨 НАПЕЧАТАЛИ 150 🪙. Инфляция — проблема хомяка.');}},
@@ -1215,15 +1228,26 @@ function drawAd(){
   if(!G.ad)return;
   const a=G.ad,w2=280,h2=130;
   const k=Math.min(1,a.t*4);
-  ctx.save();ctx.globalAlpha=k;ctx.translate(a.x,a.y);ctx.rotate(-0.03);
-  rr(0,0,w2,h2,12);ctx.fillStyle='#1c0a30';ctx.fill();
+  const ax = a.x, ay = a.y;
+  
+  ctx.save();
+  ctx.globalAlpha=k;
+  // Вращение вокруг центра рекламного окна
+  ctx.translate(ax + w2/2, ay + h2/2);
+  ctx.rotate(-0.03);
+  ctx.translate(-(ax + w2/2), -(ay + h2/2));
+  
+  rr(ax, ay, w2, h2, 12);ctx.fillStyle='#1c0a30';ctx.fill();
   ctx.strokeStyle='#ffe14d';ctx.lineWidth=3;ctx.shadowColor='#ffe14d';ctx.shadowBlur=16;ctx.stroke();ctx.shadowBlur=0;
-  nt(a.item.t,w2/2,22,15,'#ffe14d',{glow:false});
+  nt(a.item.t,ax + w2/2,ay + 22,15,'#ffe14d',{glow:false});
   const ls=a.item.b.split('\n');
-  ls.forEach((l,i)=>nt(l,w2/2,48+i*16,10,'#d8cdf0',{glow:false}));
-  uib(w2/2-70,h2-42,90,30,a.item.btn,'#39ff14',()=>{a.item.fn();G.ad=null;},{size:11});
-  uib(w2-34,6,28,28,'✕','#ff2244',()=>{G.ad=null;toast('✕ Реклама закрыта. Реклама обиделась.');},{size:13,textColor:'#fff'});
-  nt('реклама · она не уйдёт сама',w2/2,h2-8,7,'#6b5a93',{glow:false});
+  ls.forEach((l,i)=>nt(l,ax + w2/2,ay + 48+i*16,10,'#d8cdf0',{glow:false}));
+  
+  // ВАЖНО: Передаем абсолютные координаты (ax + ...), чтобы HIT-зоны работали
+  uib(ax + w2/2 - 70, ay + h2 - 42, 90, 30, a.item.btn, '#39ff14', () => { a.item.fn(); G.ad = null; }, { size: 11 });
+  uib(ax + w2 - 34, ay + 6, 28, 28, '✕', '#ff2244', () => { G.ad = null; toast('✕ Реклама закрыта. Реклама обиделась.'); }, { size: 13, textColor: '#fff' });
+  
+  nt('реклама · она не уйдёт сама',ax + w2/2, ay + h2 - 8, 7, '#6b5a93', {glow: false});
   ctx.restore();
 }
 function drawToasts(){
@@ -1288,7 +1312,7 @@ function drawGameOver(){
   nt('забирает '+lw.amount+' 🪙',W/2,222,15,'#ffe14d',{glow:false});
   if(lw.combo&&G.phase==='over')nt(String(lw.combo),W/2,250,13,'#9be8ff',{glow:false});
   nt('Твой баланс: '+players[0].chips+' 🪙'+(G.debt>0?'  ·  Долг: '+G.debt+' 📉':''),W/2,284,13,'#fff',{glow:false});
-  nt('Пиццы: '+G.pizzas.slice?'':''+G.pizzas+' 🍕 · Подсказки: '+G.hints+' 🧠',W/2,308,12,'#ff9be8',{glow:false});
+  nt('Пиццы: '+G.pizzas+' 🍕 · Подсказки: '+G.hints+' 🧠',W/2,308,12,'#ff9be8',{glow:false});
   const b=pick(players.filter(p=>!p.isHuman));
   nt('«'+pick(LOSE_LINES)+'» — '+b.name,W/2,342,11,'#8a7ab0',{glow:false});
   uib(W/2-120,370,240,56,'🎰 ЕЩЁ РАЗ','#39ff14',()=>{G.gameNum++;G.madness=Math.min(2.2,G.madness+0.15);newGame(true);},{size:20,pulse:true});
