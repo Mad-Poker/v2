@@ -175,7 +175,14 @@ function spawn(x,y,emojis,n,spd,grav){for(let i=0;i<n;i++)G.parts.push({x,y,vx:r
 function ring(x,y,color){G.rooster.rings.push({x,y,t:0,color:color||'#ffe14d'});}
 
 /* ================= ЖИВОТНЫЕ ================= */
-function runRooster(action,cb){const r=G.rooster;r.mode='enter';r.action=action;r.cb=cb;r.t=0;r.x=-90;r.y=140;r.bag=false;r.rings=[];}
+function runRooster(action,cb){
+  const r=G.rooster;
+  if(r.mode !== 'off') {
+    if(cb) cb(); // Если петух уже летит, сразу вызываем коллбэк, чтобы игра не зависла
+    return;
+  }
+  r.mode='enter';r.action=action;r.cb=cb;r.t=0;r.x=-90;r.y=140;r.bag=false;r.rings=[];
+}
 function updateRooster(dt){
   const r=G.rooster;
   if(r.mode==='off')return;
@@ -318,10 +325,8 @@ function startRound(){
   G.round++;
   if(G.round>G.maxRounds){startShowdown();return;}
   
-  // ВАЖНО: Сброс состояния игроков для нового раунда
+  // ВАЖНО: Сброс только ставок для нового раунда. Карты и статус active сохраняются!
   players.forEach(p => {
-    p.active = true;
-    p.cards = [];
     p.bet = 0;
     p.allin = false;
     p.acted = false;
@@ -641,7 +646,12 @@ function update(dt){
   G.rooster.rings.forEach(r=>{});
   G.flying=G.flying.filter(f=>{
     f.t+=dt;
-    if(f.t>=f.dur&&!f.done){f.done=true;snd.pop();return false;}
+    if(f.t>=f.dur&&!f.done){
+      f.done=true;
+      f.card.landed = true; // <--- КАРТА СТАНОВИТСЯ ВИДИМОЙ В РУКЕ
+      snd.pop();
+      return false;
+    }
     return f.t<f.dur;
   });
   // график вайбов
@@ -1029,8 +1039,15 @@ function drawSeats(){
       nt(String(p.bet),s.x+52,s.y+95,9,'#000',{glow:false});
     }
     ctx.restore();
-    // баббл
-    if(p.bubble&&p.bubble.until>now)drawBubble(s.x-92,s.y-108-(p.bubble.text.length>40?26:0),p.bubble.text,184,'#ff2e88');
+    // баббл (исправлена позиция для верхних ботов)
+    if(p.bubble && p.bubble.until > now){
+      let by = s.y - 108 - (p.bubble.text.length > 40 ? 26 : 0);
+      // Если пузырь улетает за верхний край, рисуем его прямо на аватарке/картах
+      if(by < 60) { 
+         by = s.y + 10; 
+      }
+      drawBubble(s.x - 92, by, p.bubble.text, 184, '#ff2e88');
+    }
   });
 }
 function drawPlayerZone(){
